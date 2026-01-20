@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: grafos-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474" # HTTP UI
+      - "7687:7687" # Bolt
+    environment:
+      # Credenciais básicas; personalize via .env
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-12345678}
+      # Plugins úteis (APOC já vem na imagem 5)
+      NEO4J_PLUGINS: '["apoc"]'
+      # Memória ajustável conforme máquina
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 1G
+      # Permitir procedimentos APOC não seguros se necessário (opcional)
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+    volumes:
+      - ./neo4j/data:/data
+      - ./neo4j/logs:/logs
+      - ./neo4j/import:/import
+      - ./neo4j/plugins:/plugins
