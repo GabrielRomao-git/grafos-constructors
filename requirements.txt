@@ -1,0 +1,17 @@
+networkx>=3.2.1
+igraph>=0.11.5
+pandas>=2.2.0
+PyYAML>=6.0.1
+graph-tools>=1.14.0
+tabulate>=0.9.0
+# Notebooks/visualização
+matplotlib>=3.8.0
+ipython>=8.18.0
+# Testes
+pytest>=7.4.0
+# graph-tool (Instalar na Máquina Mac com conda ou homebrew!!!): use esse link de suporte https://graph-tool.skewed.de/installation.html#macos
+# Dependências opcionais para extração via LLM:
+# langchain-openai>=0.1.0
+# openai>=1.13.0
+# tiktoken>=0.6.0
+# Defina a chave no ambiente: OPENAI_API_KEY="sua_chave_aqui"

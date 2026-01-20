@@ -1,0 +1,17 @@
+# Ambientes e caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Arquivos locais/mac
+.DS_Store
+
+# Saídas geradas
+out/
+
+# Neo4j dados/volumes
+neo4j/data/
+neo4j/logs/
+neo4j/plugins/
+neo4j/import/
