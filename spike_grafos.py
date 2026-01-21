@@ -3,10 +3,9 @@ Protótipo de construção/consulta de grafos a partir de texto Markdown (.md).
 
 Aborda:
 - Extração de triplas via heurística (regex) e stub LLM.
-- Construção de grafos em três variantes: NetworkX, estrutura manual, igraph (opcional).
+- Construção de grafos em três variantes: NetworkX, estrutura manual, igraph.
 - Consultas básicas e export/import simples.
 
-Requisitos principais: networkx, python-igraph (opcional), pandas não é necessário.
 """
 from __future__ import annotations
 
@@ -18,6 +17,25 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
 Triple = Tuple[str, str, str]
+
+
+def load_env_file(env_path: str | Path = ".env") -> None:
+    """Carrega variáveis de um arquivo .env simples se existir."""
+    path = Path(env_path)
+    if not path.exists():
+        return
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, _, val = stripped.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except Exception as exc:  # noqa: BLE001
+        print(f"[env] Não foi possível carregar .env: {exc}")
 
 
 # Configurações de domínio e qualidade
@@ -303,6 +321,33 @@ def relation_frequency(triples: Iterable[Triple]) -> Counter:
     return Counter(rel for _, rel, _ in triples)
 
 
+def _parse_llm_json(content: str) -> List[Dict[str, object]]:
+    """
+    Tenta extrair JSON mesmo que venha dentro de code fences ou com texto extra.
+    Retorna lista de dicionários ou lista vazia em caso de falha.
+    """
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[a-zA-Z0-9_-]*\n?", "", cleaned)
+        cleaned = cleaned.rstrip("` \n")
+    # Tenta achar o primeiro bloco JSON válido dentro do texto
+    candidates = [cleaned]
+    match = re.search(r"(\[.*\]|\{.*\})", cleaned, flags=re.DOTALL)
+    if match:
+        candidates.insert(0, match.group(1))
+    for candidate in candidates:
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, dict):
+                return [data]
+            if isinstance(data, list):
+                return data  # type: ignore[return-value]
+        except Exception:
+            continue
+    print(f"[LLM] Resposta não pôde ser parseada como JSON: {cleaned[:200]}...")
+    return []
+
+
 def export_networkx_graphml(graph, output_path: str | Path):
     import networkx as nx
 
@@ -322,58 +367,62 @@ def export_igraph_graphml(graph, output_path: str):
     graph.write_graphml(str(output_path))
 
 
-MOCK_LLM_TRIPLES: List[Triple] = [
-    ("sleep hygiene", "improves", "sleep quality"),
-    ("sleep apnea", "associated with", "cardiovascular disease"),
-    ("caffeine", "impairs", "sleep onset"),
-]
-
-
 def extract_triples_llm(
     text: str,
-    model: str = "gpt-4o-mini",
+    model: Optional[str] = None,
     api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    env_path: str | Path = ".env",
     max_triples: int = 30,
-    allow_mock: bool = True,
 ) -> List[Triple]:
     """
-    Esboço de extração via LLM:
-    - Se não houver chave/API ou dependências, retorna MOCK para manter execução.
-    - Para uso real, instale langchain + provedor OpenAI/compatível e forneça API key.
+    Extração via LLM usando cliente OpenAI direto (compatível com Azure/OpenAI):
+    - Requer OPENAI_API_KEY e OPENAI_BASE_URL configurados (env ou .env).
+    - OPENAI_MODEL define o deployment/modelo (ex.: gpt-4o-mini).
+    - Sem chave ou base_url, apenas registra aviso e não usa LLM.
     """
+    load_env_file(env_path)
     api_key = api_key or os.getenv("OPENAI_API_KEY")
+    base_url = base_url or os.getenv("OPENAI_BASE_URL")
+    model_name = model or os.getenv("OPENAI_MODEL") or "gpt-4o-mini"
 
     if not api_key:
-        return MOCK_LLM_TRIPLES[:max_triples] if allow_mock else []
+        print("[LLM] OPENAI_API_KEY não configurada; pulei extração via LLM.")
+        return []
+    if not base_url:
+        print("[LLM] OPENAI_BASE_URL não configurada; pulei extração via LLM.")
+        return []
 
     try:
-        try:
-            from langchain_openai import ChatOpenAI  # langchain>=0.2
-        except Exception:
-            from langchain.chat_models import ChatOpenAI  # fallback para versões antigas
-        from langchain_core.messages import HumanMessage
+        from openai import OpenAI
     except Exception:
-        # Dependências não instaladas; retorna mock para não quebrar.
-        return MOCK_LLM_TRIPLES[:max_triples] if allow_mock else []
+        print("[LLM] Dependência 'openai' ausente; instale-a para habilitar LLM.")
+        return []
+
+    client = OpenAI(base_url=base_url,api_key=api_key)
 
     prompt_template = (
-        "Extraia triplas (origem, relação, destino) do texto abaixo.\n"
-        "Responda apenas em JSON com lista de objetos: "
-        '[{"src": "...", "rel": "...", "dst": "..."}]\n'
-        "Mantenha relações curtas (1-5 palavras) e cite somente fatos explícitos.\n"
-        "Texto:\n{chunk}"
-    )
+            "Extraia triplas (origem, relação, destino) do texto abaixo.\n"
+            "Responda SOMENTE em JSON válido, sem markdown, sem texto extra.\n"
+            "Formato: [{{src: ..., rel: ..., dst: ...}}]\n"
+            "Use relações curtas (1-5 palavras), tudo em minúsculas, cite apenas fatos explícitos.\n"
+            "Texto:\n{chunk}"
+        )
 
-    llm = ChatOpenAI(model=model, api_key=api_key, temperature=0)
     triples: List[Triple] = []
 
     for chunk in chunk_text_by_chars(text, max_chars=8000)[:4]:
         try:
-            resp = llm.invoke([HumanMessage(content=prompt_template.format(chunk=chunk))])
-            content = resp.content if hasattr(resp, "content") else str(resp)
-            data = json.loads(content)
-            if isinstance(data, dict):
-                data = [data]
+            resp = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt_template.format(chunk=chunk)}]
+            )
+            message = resp.choices[0].message if resp and resp.choices else None
+
+            content = message.content if message else ""
+            print(f"[LLM][content] {content}\n")
+
+            data = _parse_llm_json(content)
             for item in data:
                 src = _normalize_entity(str(item.get("src", "")))
                 rel = str(item.get("rel", "")).lower()
@@ -388,9 +437,6 @@ def extract_triples_llm(
             print(f"[LLM] Erro ao processar chunk: {exc}")
             continue
 
-    if not triples and allow_mock:
-        return MOCK_LLM_TRIPLES[:max_triples]
-
     return dedupe_triples(triples)[:max_triples]
 
 
@@ -398,16 +444,18 @@ def demo_pipeline(
     md_path: str | Path = "artigos/text.md",
     output_dir: str | Path = "out",
     max_triples_from_md: int = 60,
+    env_path: str | Path = "env.example",
 ):
+    load_env_file(env_path)
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     raw_text = load_markdown(md_path)
     cleaned = clean_markdown(raw_text)
     triples_md = extract_triples_heuristic(cleaned, max_triples=max_triples_from_md)
-    triples_llm_stub = extract_triples_llm(cleaned, allow_mock=True, max_triples=10)
+    triples_llm = extract_triples_llm(cleaned, max_triples=10, env_path=env_path)
 
-    combined = dedupe_triples([*triples_md, *triples_llm_stub, *SYNTHETIC_TRIPLES])
+    combined = dedupe_triples([*triples_md, *triples_llm, *SYNTHETIC_TRIPLES])
 
     # Manual graph
     manual_graph = build_manual_graph(combined)
@@ -434,7 +482,7 @@ def demo_pipeline(
 
     return {
         "triples_md": triples_md,
-        "triples_llm_stub": triples_llm_stub,
+        "triples_llm": triples_llm,
         "combined": combined,
     }
 
