@@ -11,7 +11,6 @@ ipython>=8.18.0
 pytest>=7.4.0
 # graph-tool (Instalar na Máquina Mac com conda ou homebrew!!!): use esse link de suporte https://graph-tool.skewed.de/installation.html#macos
 # Dependências opcionais para extração via LLM:
-# langchain-openai>=0.1.0
-# openai>=1.13.0
-# tiktoken>=0.6.0
-# Defina a chave no ambiente: OPENAI_API_KEY="sua_chave_aqui"
+langchain-openai>=0.1.0
+openai>=1.13.0
+tiktoken>=0.6.0

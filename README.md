@@ -7,7 +7,7 @@ Protótipo em Python para extrair triplas de um texto `.md`, construir grafos em
 - Ambiente virtual (uv/venv).
 - Bibliotecas (ver `requirements.txt`):
   - Obrigatórias: `networkx`, `python-igraph`, `pandas`, `PyYAML`.
-  - Opcionais: `graph-tool` (instalação mais complexa), `langchain` + `openai` (ou compatível) para LLM real.
+- Opcionais: `graph-tool` (instalação mais complexa), `openai` + `tiktoken` (cliente direto) e `langchain-openai` se quiser usar LangChain em paralelo.
 - Instalação sugerida: `pip install -r requirements.txt` (comente/remova pacotes que não quiser).
 - Arquivo de entrada em `artigos/text.md` (pode trocar via argumento na função `demo_pipeline`).
 
@@ -23,8 +23,8 @@ Protótipo em Python para extrair triplas de um texto `.md`, construir grafos em
 ## Ordem das etapas no código
 1. **Leitura e limpeza**: `load_markdown` lê o `.md`; `clean_markdown` remove marcações simples, URLs e excesso de espaços.
 2. **Extração de triplas (heurística)**: `extract_triples_heuristic` aplica regex em sentenças para achar padrões `origem -> relação -> destino`.
-3. **Extração com LLM (stub)**: `extract_triples_llm` retorna mock se não houver chave/dep; pode ser trocado por chamada real (LangChain/OpenAI).
-4. **Combinação e dedupe**: junta triplas heurísticas, LLM stub e dataset sintético (`SYNTHETIC_TRIPLES`) e remove duplicatas.
+3. **Extração com LLM (opcional)**: `extract_triples_llm` só roda se `OPENAI_API_KEY` e `OPENAI_BASE_URL` estiverem setadas; sem chave/base, imprime aviso e pula.
+4. **Combinação e dedupe**: junta triplas heurísticas, triplas do LLM (se houver) e dataset sintético (`SYNTHETIC_TRIPLES`) e remove duplicatas.
 5. **Construção de grafos**:
    - Estrutura manual (`build_manual_graph`): dicionários com índices de entrada/saída.
    - NetworkX (`build_networkx`): `DiGraph` com atributo `relation`.
@@ -45,7 +45,7 @@ Protótipo em Python para extrair triplas de um texto `.md`, construir grafos em
 - Trocar arquivo de entrada: passe outro caminho para `demo_pipeline(md_path=...)`.
 - Limitar/expandir triplas extraídas: ajuste `max_triples_from_md`.
 - Refinar heurística: edite `REL_PATTERNS` e aplique stopwords/remoção de seções irrelevantes antes da extração.
-- Ativar LLM real: instale `langchain` + cliente OpenAI/compatível, defina `OPENAI_API_KEY` e substitua o stub em `extract_triples_llm` pela chamada real.
+- Ativar LLM real: instale `openai` + `tiktoken` (e `langchain-openai` se desejar), defina `OPENAI_API_KEY`, `OPENAI_BASE_URL` (ex.: endpoint Azure) e `OPENAI_MODEL` (deployment/modelo) e execute normalmente.
 - Habilitar igraph: instale `python-igraph` e reexecute o script.
 
 ## Neo4j
@@ -55,9 +55,9 @@ Protótipo em Python para extrair triplas de um texto `.md`, construir grafos em
 - UI: http://localhost:7474 — Bolt: `bolt://localhost:7687`
 - Exportar CSV isolado: `make neo4j-csv` (gera `neo4j/import/nodes.csv` e `neo4j/import/edges.csv`)
 
-## LLM (opcional) (Nao foi configurado chave)
-- Pacotes opcionais listados (comentados) em `requirements.txt`: `langchain-openai`, `openai`, `tiktoken`.
-- Configure `OPENAI_API_KEY` no ambiente (veja `env.example`) antes de ativar a chamada real no `extract_triples_llm`.
+## LLM (opcional)
+- Instale os pacotes opcionais do `requirements.txt`: `openai`, `tiktoken` (e `langchain-openai` se quiser compatibilidade com LangChain).
+- Configure `OPENAI_API_KEY`, `OPENAI_BASE_URL` (por ex. endpoint Azure) e `OPENAI_MODEL` (deployment). Sem chave/base o LLM é ignorado e um aviso é impresso.
 - O fluxo implementa chunking (~2000 tokens) e dedupe combinado com heurística + `SYNTHETIC_TRIPLES`.
 
 ## Automação e testes
