@@ -29,7 +29,7 @@
 - NetworkX: API simples, ótimo para POC, boa compatibilidade (GraphML). Menor performance em grafos muito grandes.
 - Estrutura manual: zero dependências, totalmente controlável; precisa mais código para queries avançadas (caminhos, métricas).
 - igraph: mais performática e compacta; API diferente, documentação sólida; instalação pode ser mais sensível em alguns ambientes.
-- Neo4j (não implementado aqui): útil se precisar de persistência, consultas ricas (Cypher) e integração com GraphRAG; requer setup de DB/container.
+- Neo4j: útil se precisar de persistência, consultas ricas (Cypher) e integração com GraphRAG; requer setup de DB/container.
 
 ## Recomendações iniciais
 - Para spike/POC: use NetworkX + heurística atual; combine com stub LLM apenas se quiser enriquecer triplas.
